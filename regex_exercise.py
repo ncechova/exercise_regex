@@ -2,8 +2,9 @@ import re
 from Bio import SeqIO
 import gzip
 import csv
+import os
 
-# --- TASK 1 ---git 
+# --- TASK 1 ---
 log_lines = [
     "2024-01-15 10:02:11 INFO Server started on port 8080",
     "2024-01-15 10:03:47 ERROR Failed to connect to database",
@@ -55,7 +56,8 @@ for line in log_lines:
 
 
 # (Optional) Check whether a single line, e.g. log_lines[0], matches the full expected format YYYY-MM-DD HH:MM:SS LEVEL message from start to end.
-print(re.match(r"\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\s\w+\s.+", log_lines[0]))
+check_format = re.fullmatch(r"\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\s\w+\s.+", log_lines[0])
+# print(f"Does the log line match the full expected format? {'Yes' if check_format else 'No'}")
 
 
 # --- TASK 2 ---
@@ -106,25 +108,68 @@ class Demultiplexer:
     def __init__(self, fasta_path, mid_table_path):
         self.fasta_path = fasta_path
         self.mid_table_path = mid_table_path
-        self.reads = []
 
+        self.reads = []
         with gzip.open(self.fasta_path, "rt") as file:
             for record in SeqIO.parse(file, "fasta"):
                 read = SequencingRead(record.id, str(record.seq))
                 self.reads.append(read)
                 # print(read.describe())
 
+        self.mids = []
         with open(self.mid_table_path, newline='') as csvfile:
             reader = csv.DictReader(csvfile, delimiter=';')
             for row in reader:
-                forward_mid = row['forward_MID']
-                reverse_mid = row['reverse_MID']
+                sample_id = row['SampleID']
+                description = row['Description']
 
+                label = f"{sample_id}_{description}"
+                forward_mid = row['FBarcodeSequence']
+                reverse_mid = row['RBarcodeSequence']
+                self.mids.append((label, forward_mid, reverse_mid))
+
+        self.assigned = {label: [] for label, _, _ in self.mids}
+        self.unassigned = []
+
+    def assign_reads(self):
+        for read in self.reads:
+            assigned = False
+            for label, forward_mid, reverse_mid in self.mids:
+                if read.matches_mid_pair(forward_mid, reverse_mid):
+                    trimmed = read.trim_mid_pair(forward_mid, reverse_mid)
+                    self.assigned[label].append(SequencingRead(read.read_id, trimmed))
+                    assigned = True
+                    break
+                if read.matches_mid_pair(reverse_mid, forward_mid): # reverse orientation
+                    trimmed = read.trim_mid_pair(reverse_mid, forward_mid)
+                    self.assigned[label].append(SequencingRead(read.read_id, trimmed))
+                    assigned = True
+                    break
+            if not assigned:
+                self.unassigned.append(read)
+
+    def report(self):
+        report_lines = []
+        for label, reads in self.assigned.items():
+            report_lines.append(f"{label}: {len(reads)} reads assigned")
+        report_lines.append(f"Unassigned: {len(self.unassigned)} reads")
+        return "\n".join(report_lines)
+
+    def write_fasta(self, output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+        for label, reads in self.assigned.items():
+            filename = f"{output_dir}/{label.replace(' ', '_')}.fasta"
+            with open(filename, 'w') as f:
+                for read in reads:
+                    f.write(f">{read.read_id}\n{read.sequence}\n")
 
 
 if __name__ == "__main__":
     fasta_file = "fishes.fna.gz"
     mid_table_file = "fishes_MIDs.csv"
-    demultiplexer = Demultiplexer(fasta_file, mid_table_file)
-    print(demultiplexer)
+ 
+    demux = Demultiplexer(fasta_file, mid_table_file)
+    demux.assign_reads()
+    print(demux.report())
+    demux.write_fasta("demux_output")
 
