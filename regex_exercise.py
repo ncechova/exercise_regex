@@ -1,4 +1,7 @@
 import re
+from Bio import SeqIO
+import gzip
+import csv
 
 # --- TASK 1 ---git 
 log_lines = [
@@ -70,9 +73,6 @@ class SequencingRead:
         self.read_id = read_id
         self.sequence = sequence
 
-#     matches_mid_pair(self, forward_mid, reverse_mid) → bool: True if self.sequence starts with forward_mid and ends with the reverse complement of reverse_mid — built and checked as a single regex (anchors ^/$, not two separate .startswith()/.endswith() calls).
-# trim_mid_pair(self, forward_mid, reverse_mid) → str | None: if matches_mid_pair(...) is True, return the sequence with both MIDs removed (just the insert in between); otherwise return None.
-# describe(self) → str: e.g. "SequencingRead demo_1 (46 bp)".
 
     def matches_mid_pair(self, forward_mid, reverse_mid):
         # Create a regex pattern to match the forward MID at the start and the reverse complement of the reverse MID at the end
@@ -95,7 +95,36 @@ class SequencingRead:
         return f"{type(self).__name__} {self.read_id} ({len(self.sequence)} bp)"
 
 r1 = SequencingRead("demo_1", "AGCTTCGA" + "N" * 20 + reverse_complement("TGCAGGTC"))
-print(r1.describe())
-print(r1.matches_mid_pair("AGCTTCGA", "TGCAGGTC"))  # True
-print(r1.matches_mid_pair("CGATCGAT", "GCTAGCTA"))  # False
-print(r1.trim_mid_pair("AGCTTCGA", "TGCAGGTC"))     # 20 x "N"
+# print(r1.describe())
+# print(r1.matches_mid_pair("AGCTTCGA", "TGCAGGTC"))  # True
+# print(r1.matches_mid_pair("CGATCGAT", "GCTAGCTA"))  # False
+# print(r1.trim_mid_pair("AGCTTCGA", "TGCAGGTC"))     # 20 x "N"
+
+
+# --- TASK 3 ---
+class Demultiplexer:
+    def __init__(self, fasta_path, mid_table_path):
+        self.fasta_path = fasta_path
+        self.mid_table_path = mid_table_path
+        self.reads = []
+
+        with gzip.open(self.fasta_path, "rt") as file:
+            for record in SeqIO.parse(file, "fasta"):
+                read = SequencingRead(record.id, str(record.seq))
+                self.reads.append(read)
+                # print(read.describe())
+
+        with open(self.mid_table_path, newline='') as csvfile:
+            reader = csv.DictReader(csvfile, delimiter=';')
+            for row in reader:
+                forward_mid = row['forward_MID']
+                reverse_mid = row['reverse_MID']
+
+
+
+if __name__ == "__main__":
+    fasta_file = "fishes.fna.gz"
+    mid_table_file = "fishes_MIDs.csv"
+    demultiplexer = Demultiplexer(fasta_file, mid_table_file)
+    print(demultiplexer)
+
