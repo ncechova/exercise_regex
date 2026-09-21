@@ -44,11 +44,11 @@ for line in log_lines:
         lines_with_url.append(line)
 
 
-print(f"Lines logged on 2024-01-16: \n {lines_2024_01_16}")
-print(f"Lines that are ERROR or WARNING: \n {lines_error_warning}")
-print(f"IPv4 addresses found: \n {ipv4_addresses}")
-print(f"Lines ending in seconds: \n {lines_ending_in_seconds}")
-print(f"Lines with URLs: \n {lines_with_url}")
+# print(f"Lines logged on 2024-01-16: \n {lines_2024_01_16}")
+# print(f"Lines that are ERROR or WARNING: \n {lines_error_warning}")
+# print(f"IPv4 addresses found: \n {ipv4_addresses}")
+# print(f"Lines ending in seconds: \n {lines_ending_in_seconds}")
+# print(f"Lines with URLs: \n {lines_with_url}")
 
 
 # (Optional) Check whether a single line, e.g. log_lines[0], matches the full expected format YYYY-MM-DD HH:MM:SS LEVEL message from start to end.
@@ -59,5 +59,43 @@ print(re.match(r"\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\s\w+\s.+", log_lines[0]))
 
 # forward_MID + <sequence of interest> + reverse_complement(reverse_MID)
 
-# class SequencingRead:
-#     def 
+def reverse_complement(dna_sequence):
+    complement = {'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C'}
+    reversed_sequence = dna_sequence[::-1]
+    return ''.join(complement[base] for base in reversed_sequence)
+
+
+class SequencingRead:
+    def __init__(self, read_id, sequence):
+        self.read_id = read_id
+        self.sequence = sequence
+
+#     matches_mid_pair(self, forward_mid, reverse_mid) → bool: True if self.sequence starts with forward_mid and ends with the reverse complement of reverse_mid — built and checked as a single regex (anchors ^/$, not two separate .startswith()/.endswith() calls).
+# trim_mid_pair(self, forward_mid, reverse_mid) → str | None: if matches_mid_pair(...) is True, return the sequence with both MIDs removed (just the insert in between); otherwise return None.
+# describe(self) → str: e.g. "SequencingRead demo_1 (46 bp)".
+
+    def matches_mid_pair(self, forward_mid, reverse_mid):
+        # Create a regex pattern to match the forward MID at the start and the reverse complement of the reverse MID at the end
+        reverse_comp = reverse_complement(reverse_mid)
+        pattern = f"^{forward_mid}.*{reverse_comp}$"
+        if re.match(pattern, self.sequence):
+            return True
+        return False
+
+    def trim_mid_pair(self, forward_mid, reverse_mid):
+        if self.matches_mid_pair(forward_mid, reverse_mid):
+            reverse_comp = reverse_complement(reverse_mid)
+            # Remove the forward MID and the reverse complement of the reverse MID from the sequence
+            trimmed_sequence = re.sub(f"^{forward_mid}", "", self.sequence)
+            trimmed_sequence = re.sub(f"{reverse_comp}$", "", trimmed_sequence)
+            return trimmed_sequence
+        return None
+
+    def describe(self):
+        return f"{type(self).__name__} {self.read_id} ({len(self.sequence)} bp)"
+
+r1 = SequencingRead("demo_1", "AGCTTCGA" + "N" * 20 + reverse_complement("TGCAGGTC"))
+print(r1.describe())
+print(r1.matches_mid_pair("AGCTTCGA", "TGCAGGTC"))  # True
+print(r1.matches_mid_pair("CGATCGAT", "GCTAGCTA"))  # False
+print(r1.trim_mid_pair("AGCTTCGA", "TGCAGGTC"))     # 20 x "N"
